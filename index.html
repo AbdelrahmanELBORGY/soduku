@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PS1 Sudoku CSP</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --ps1-blue: #003b8e;
+            --ps1-cyan: #00f0ff;
+            --ps1-bg: #111;
+            --ps1-gray: #888;
+        }
+        
+        body { 
+            font-family: 'Press Start 2P', cursive; 
+            background-color: var(--ps1-bg); 
+            color: #fff; 
+            display: flex; 
+            flex-direction: column; 
+            align-items: center; 
+            margin: 0;
+            height: 100vh;
+            justify-content: center;
+            overflow: hidden;
+            position: relative;
+        }
+
+        /* CRT Scanline Effect */
+        body::before {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 100;
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+        }
+
+        h2 { color: var(--ps1-cyan); text-shadow: 2px 2px #000; font-size: 20px; margin-bottom: 20px;}
+
+        /* Entry Screen */
+        #intro-screen {
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            z-index: 50;
+        }
+        .blinking { animation: blinker 1.5s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+
+        /* Game Screen */
+        #game-screen { display: none; flex-direction: column; align-items: center; z-index: 50; }
+
+        /* Enhanced Board Grid */
+        .board { 
+            display: grid; 
+            grid-template-columns: repeat(9, 45px); 
+            grid-template-rows: repeat(9, 45px); 
+            background-color: #000;
+            border: 4px solid #fff; /* Thick white outer border */
+            box-shadow: 5px 5px 0px #000;
+        }
+        
+        .cell { 
+            width: 45px; height: 45px; 
+            text-align: center; 
+            font-size: 16px; 
+            font-family: 'Press Start 2P', cursive;
+            background-color: #222; 
+            color: #fff; 
+            border: 1px solid #444; /* Thin default borders for every cell */
+            box-sizing: border-box; /* CRITICAL: Stops thick borders from breaking the grid size */
+            outline: none; 
+            caret-color: transparent;
+        }
+        
+        .cell:focus { background-color: #333; }
+        .cell.readonly { color: var(--ps1-cyan); background-color: #1a1a1a; }
+        
+        /* Inner 3x3 Borders - Thick White Lines */
+        .cell:nth-child(3n) { border-right: 3px solid #fff; }
+        .cell:nth-child(9n) { border-right: none; } /* Prevents double border on the far right */
+        
+        .cell:nth-child(n+19):nth-child(-n+27), 
+        .cell:nth-child(n+46):nth-child(-n+54) { 
+            border-bottom: 3px solid #fff; 
+        }
+        /* Validation Colors */
+        .correct { color: #00ff00 !important; text-shadow: 0 0 5px #00ff00; }
+        .wrong { color: #ff0000 !important; text-shadow: 0 0 5px #ff0000; }
+
+        .controls { margin-top: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button { 
+            padding: 12px; 
+            font-size: 10px; 
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer; 
+            background-color: var(--ps1-gray); 
+            color: #000; 
+            border: 2px solid #fff; 
+            box-shadow: 3px 3px 0px #000;
+        }
+        button:hover { background-color: #aaa; transform: translate(2px, 2px); box-shadow: 1px 1px 0px #000; }
+        .btn-ai { background-color: var(--ps1-cyan); }
+
+        /* AI Details Panel */
+        #ai-stats {
+            margin-top: 15px;
+            padding: 10px;
+            border: 2px dashed var(--ps1-cyan);
+            background: #000;
+            color: var(--ps1-cyan);
+            font-size: 10px;
+            line-height: 1.8;
+            width: 380px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="intro-screen">
+        <h1 style="color: #fff; font-size: 30px; margin-bottom: 5px;">SUDOKU</h1>
+        <p style="color: var(--ps1-cyan); font-size: 12px; margin-bottom: 50px;">CSP SOLVER EDITION</p>
+        <p style="color: var(--ps1-gray); font-size: 8px; margin-bottom: 30px;">ASSIGNMENT 3 - AI COURSE</p>
+        <button class="blinking" style="background: none; border: none; color: #00ff00; box-shadow: none; font-size: 14px;" onclick="startGame()">PRESS START</button>
+    </div>
+
+    <div id="game-screen">
+        <h2>SODUKU</h2>
+        <div class="board" id="sudoku-board"></div>
+
+        <div class="controls">
+            <button onclick="generateBoard()">NEW GAME</button>
+            <button onclick="checkUserSolution()">CHECK MOVES</button>
+            <button class="btn-ai" onclick="solveBoard()">AI SOLVE</button>
+            <button onclick="clearBoard()">CLEAR</button>
+        </div>
+
+        <div id="ai-stats">
+            > SYSTEM ANALYTICS <br><br>
+            [METHOD] : <span id="stat-algo"></span><br>
+            [TIME]   : <span id="stat-time"></span> ms<br>
+            [ARCS]   : <span id="stat-steps"></span> revisions
+        </div>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000";
+        const boardElement = document.getElementById('sudoku-board');
+        let currentSolution = [];
+
+        function startGame() {
+            document.getElementById('intro-screen').style.display = 'none';
+            document.getElementById('game-screen').style.display = 'flex';
+            createBoard();
+            generateBoard(); // Auto-load a game
+        }
+
+        function createBoard() {
+            boardElement.innerHTML = '';
+            for (let r = 0; r < 9; r++) {
+                for (let c = 0; c < 9; c++) {
+                    const input = document.createElement('input');
+                    input.type = 'text'; input.maxLength = 1; input.className = 'cell';
+                    input.dataset.row = r; input.dataset.col = c;
+                    
+                    input.addEventListener('input', (e) => {
+                        const val = parseInt(e.target.value);
+                        if (isNaN(val) || val < 1 || val > 9) { e.target.value = ''; }
+                        e.target.classList.remove('correct', 'wrong'); // Reset colors on typing
+                        document.getElementById('ai-stats').style.display = 'none';
+                    });
+                    boardElement.appendChild(input);
+                }
+            }
+        }
+
+        function getGridData() {
+            const cells = document.querySelectorAll('.cell');
+            let grid = Array.from({ length: 9 }, () => Array(9).fill(0));
+            cells.forEach(cell => {
+                const r = cell.dataset.row; const c = cell.dataset.col;
+                const val = parseInt(cell.value);
+                grid[r][c] = isNaN(val) ? 0 : val;
+            });
+            return grid;
+        }
+
+        function updateBoardUI(grid, isInitial = false) {
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                const r = cell.dataset.row; const c = cell.dataset.col;
+                cell.classList.remove('correct', 'wrong', 'readonly');
+                cell.readOnly = false;
+
+                if (grid[r][c] !== 0) {
+                    cell.value = grid[r][c];
+                    if (isInitial) {
+                        cell.classList.add('readonly');
+                        cell.readOnly = true;
+                    }
+                } else {
+                    cell.value = '';
+                }
+            });
+        }
+
+        // Feature: Check User Play based on Current Board State (Not Final Solution)
+        function checkUserSolution() {
+            const grid = getGridData();
+            const cells = document.querySelectorAll('.cell');
+            
+            cells.forEach(cell => {
+                const r = parseInt(cell.dataset.row); 
+                const c = parseInt(cell.dataset.col);
+                const val = parseInt(cell.value);
+                
+                // Only check cells that the user typed into (not readonly)
+                if (!cell.readOnly && !isNaN(val)) {
+                    
+                    // Temporarily remove the value from the grid array so it doesn't clash with itself
+                    grid[r][c] = 0; 
+                    const isValid = checkSudokuConstraints(grid, r, c, val);
+                    grid[r][c] = val; // Restore it
+                    
+                    if (isValid) {
+                        cell.classList.add('correct');
+                        cell.classList.remove('wrong');
+                    } else {
+                        cell.classList.add('wrong');
+                        cell.classList.remove('correct');
+                    }
+                }
+            });
+        }
+
+        // Helper function: Checks if a number violates Sudoku rules on the current grid
+        function checkSudokuConstraints(grid, row, col, num) {
+            // Check row
+            for (let i = 0; i < 9; i++) {
+                if (grid[row][i] === num) return false;
+            }
+            // Check column
+            for (let i = 0; i < 9; i++) {
+                if (grid[i][col] === num) return false;
+            }
+            // Check 3x3 box
+            let startR = Math.floor(row / 3) * 3;
+            let startC = Math.floor(col / 3) * 3;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    if (grid[startR + i][startC + j] === num) return false;
+                }
+            }
+            return true;
+        }
+
+        async function solveBoard() {
+            const grid = getGridData();
+            try {
+                const response = await fetch(`${API_URL}/solve`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ grid: grid })
+                });
+                if (!response.ok) { alert("NO SOLUTION EXISTS FOR CURRENT STATE!"); return; }
+                const data = await response.json();
+                
+                const cells = document.querySelectorAll('.cell');
+                cells.forEach(cell => {
+                    const r = cell.dataset.row; 
+                    const c = cell.dataset.col;
+                    
+                    // Only update and highlight cells that are NOT part of the original puzzle
+                    if (!cell.readOnly) {
+                        cell.value = data.grid[r][c];
+                        cell.classList.remove('wrong');
+                        cell.classList.add('correct'); // Highlights the AI's answer in green
+                    }
+                });
+                
+                // Show AI Stats
+                document.getElementById('stat-algo').innerText = data.details.algorithm;
+                document.getElementById('stat-time').innerText = data.details.time_ms;
+                document.getElementById('stat-steps').innerText = data.details.ac3_steps;
+                document.getElementById('ai-stats').style.display = 'block';
+
+            } catch (err) { alert("CONNECTION ERROR TO BACKEND."); }
+        }
+
+        async function generateBoard() {
+            document.getElementById('ai-stats').style.display = 'none';
+            try {
+                const response = await fetch(`${API_URL}/generate`, { method: 'POST' });
+                const data = await response.json();
+                currentSolution = data.solution; // Save answer key for the checker
+                updateBoardUI(data.grid, true);
+            } catch (err) { alert("CONNECTION ERROR TO BACKEND."); }
+        }
+
+        function clearBoard() {
+            // Hide the AI stats panel if it's open
+            document.getElementById('ai-stats').style.display = 'none';
+            
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                // Only clear the cell if it is NOT part of the original generated puzzle
+                if (!cell.readOnly) {
+                    cell.value = '';
+                    cell.classList.remove('correct', 'wrong'); // Remove any red/green validation colors
+                }
+            });
+        }
+    </script>
+</body>
+</html>
